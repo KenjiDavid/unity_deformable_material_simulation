@@ -1,0 +1,174 @@
+//SE MANTIENE POR SI SE QUISIERA CONSULTAR MAS TARDE, CODIGO COLLIDER TRINAGULAR
+
+/*    
+ /CREAR LOS COLLIDERS PARA EL MESH
+    void CreateColliders()
+    {
+
+        for (int i = 0; i < (xSize + 1) * (zSize + 1); i++)
+        {
+            GameObject obj = objectVector[i];
+            // Añadir un MeshCollider
+            MeshCollider meshCollider = obj.AddComponent<MeshCollider>();
+
+            // Añadir el componente MeshRenderer al GameObject
+            MeshRenderer meshRenderer = obj.AddComponent<MeshRenderer>();
+
+            // Añadir MeshFilter y MeshCollider
+            MeshFilter meshFilter = obj.AddComponent<MeshFilter>();
+
+            // Crear una nueva malla
+            Mesh mesh = new Mesh();
+
+
+
+            // Suponiendo que tienes un vector con todos los vértices de la malla original
+            // Selecciona los vértices que correspondan a los triángulos que quieras usar
+
+            int desiredVertexCount = 0; //por ver si es util
+            int desiredTrianglesCount = 0; //por ver si es util
+            
+            Vector3[] selectedVertices; //donde guardo los vertices del collider inndividual
+            int[] selectedTriangles; ////donde guardo los triangulos del collider inndividual
+
+            //Debug.Log("Tiene que haber 441 mensajes");
+            if (obj.transform.position.x == initPosX || obj.transform.position.x == xSize + initPosX
+                || obj.transform.position.z == initPosZ || obj.transform.position.z == zSize + initPosZ)
+            {
+
+                //Debug.Log("Tiene que haber 80 mensajes");
+
+                if ((obj.transform.position.x == initPosX || obj.transform.position.x == xSize + initPosX)
+                    && (obj.transform.position.z == initPosZ || obj.transform.position.z == zSize + initPosZ))
+                {
+                    //Debug.Log("Tiene que haber 4 mensajes, son las 4 esquinas");
+
+                    if (obj.transform.position.x == initPosX && obj.transform.position.z == initPosZ) // Caso 1
+                    {
+                        //Debug.Log("Esquina inferior izq.");
+
+                        // este collider tiene 3 vertices y 1 triangulo
+                        selectedVertices = new Vector3[3];
+                        // Asignar los vértices del primer triángulo (asegúrate de que estos índices existan en el array vertices)
+                        selectedVertices[0] = vertices[triangles[0]];  // Este debe estar dentro del rango de vertices
+                        selectedVertices[1] = vertices[triangles[1]];  // Este debe estar dentro del rango de vertices
+                        selectedVertices[2] = vertices[triangles[2]];  // Este debe estar dentro del rango de vertices
+
+                        // Crear un array de triángulos. Aquí estamos definiendo un triángulo con los vértices [0, 1, 2]
+                        selectedTriangles = new int[3];
+                        selectedTriangles[0] = 0;  // Primer vértice
+                        selectedTriangles[1] = 1;  // Segundo vértice
+                        selectedTriangles[2] = 2;  // Tercer vértice
+
+
+                        // Asignar los vértices y triángulos a la malla  // QUIRTAR CUANDO ESTEN TODOS LOS CASOS
+                        mesh.vertices = selectedVertices;
+                        mesh.triangles = selectedTriangles;
+                        meshFilter.mesh = mesh;
+                        mesh.RecalculateNormals();
+                        mesh.RecalculateBounds();
+                        mesh.Optimize();
+
+                        meshCollider.sharedMesh = mesh;
+                        meshCollider.convex = false; //tiene que ser true ya que Unity no permite GameObjects con rigidbody y non-convex
+                    }
+
+                    if (obj.transform.position.x == xSize + initPosX && obj.transform.position.z == initPosZ) // Caso 3
+                    {
+                        //Debug.Log("Esquina inferior der.");
+                        desiredVertexCount = 4;
+                        desiredTrianglesCount = 2;
+                
+                    }
+
+                    if (obj.transform.position.x == initPosX && obj.transform.position.z == zSize + initPosZ) // Caso 7
+                    {
+                        //Debug.Log("Esquina superior izq.");
+                        desiredVertexCount = 2;
+                        desiredTrianglesCount = 4;
+                      
+                    }
+
+
+                    if (obj.transform.position.x == xSize + initPosX && obj.transform.position.z == zSize + initPosZ) // Caso 9
+                    {
+                        //Debug.Log("Esquina superior der.");
+                        desiredVertexCount = 1;
+                        desiredTrianglesCount = 3;
+                        
+                    }
+
+                }
+                else
+                {
+                    //Debug.Log("Tiene que haber 76 mensajes");
+
+                    if (obj.transform.position.z == initPosZ) // Caso 2
+                    {
+                        //Debug.Log("Vertice inferior hay 19");
+                        desiredVertexCount = 5;
+                        desiredTrianglesCount = 3;
+                        
+                    }
+
+                    if (obj.transform.position.x == initPosX ) // Caso 4
+                    {
+                        //Debug.Log("Vertice izquierda hay 19");
+                        desiredVertexCount = 5;
+                        desiredTrianglesCount = 3;
+                      
+                    }
+
+                    if (obj.transform.position.x == xSize + initPosX) // Caso 6
+                    {
+                        //Debug.Log("Vertice derecha hay 19");
+                        desiredVertexCount = 5;
+                        desiredTrianglesCount = 3;
+                       
+                    }
+
+
+                    if (obj.transform.position.z == zSize + initPosZ) // Caso 8
+                    {
+                        //Debug.Log("Vertice superior hay 19");
+                        desiredVertexCount = 5;
+                        desiredTrianglesCount = 3;
+                      
+                    }
+                }
+
+
+            }
+            else
+            {
+                //Debug.Log("Tiene que haber 361 mensajes");
+                desiredVertexCount = 7;
+                desiredTrianglesCount = 6;
+                
+
+            }
+
+
+            // Asignar los vértices y triángulos a la malla
+            mesh.vertices = selectedVertices;
+mesh.triangles = selectedTriangles; //descomentar cuando se hagan todos los casos !!!!!  ****
+
+
+// Asignar la malla al MeshFilter
+meshFilter.mesh = mesh;
+
+// Recalcular normales para asegurar que el collider funcione bien
+mesh.RecalculateNormals();
+
+// Asignar la malla al MeshCollider
+meshCollider.sharedMesh = mesh;
+
+
+// Opcional: Si deseas que sea un "convex" collider
+meshCollider.convex = false; 
+
+
+        //fin for
+    //fin creacion de mesh
+
+    */

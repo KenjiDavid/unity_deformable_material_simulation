@@ -1,0 +1,577 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using System;
+
+
+
+[RequireComponent(typeof(MeshFilter))]
+[RequireComponent(typeof(MeshRenderer))]
+[RequireComponent(typeof(MeshCollider))]
+
+
+public class MeshDeformation_1 : MonoBehaviour
+{
+
+    public Mesh mesh;
+
+    Vector3[] vertices;
+    int[] triangles;
+
+    Color[] colors;
+
+    public int xSize = 20;
+    public int zSize = 20;
+    public float MeshScale = 1f;
+    //me pregunta donde esta la posición inicial o origen del mesh
+    public int initPosX = 0;
+    public int initPosZ = 0;
+    public int initPosY = 0;
+
+    public Gradient gradient;
+
+    //variables necesarias para normalizar el gradiente de color
+    float minTerrainHeight;
+    float maxTerrainHeight;
+    List<float> TerrainHeight;
+
+    //variables auxiliares
+    private int first_time = 0; //para que en una funcion comun en Star y Update, solo me pase por una parte
+
+
+
+
+    //---------------------------------------/
+    //VARIABLES MESH DEFORMATION
+    //mesh del mesh deformattion
+    Mesh deformingMesh;
+    //variables deformacion
+    Vector3[] originalVertices;
+    Vector3[] displacedVertices;
+
+
+    //---------------------------------------------------------------
+    //PROPIEDADES MATERIAL MESH PARA TODOS LOS COLLIDERS
+    // Crear un nuevo material físico para el mesh
+    PhysicMaterial ElasticMeshMaterial;
+
+    public float MeshDynamicFriction = 0.0f;    //friccion dinamica, valores sugeridos para piel humana entre 0.3-0.5
+    public float MeshStaticFriction = 0.0f;     //friccion estatica, valores sugeridos para piel humana entre 0.2-0.4
+    public float MeshBounciness = 0.0f;         //rebote, valores sugeridos para piel humana entre 0.0-0.1
+
+    //---------------------------------------------------------------
+
+    private int objectCount = 0; // Número total de objetos
+    private GameObject[] objectVector; // Vector para almacenar los objetos
+
+    //---------------------------------------------------------------
+    //VARIABLES MUELLE-AMORTIGUADOR
+    public float springConstant = 1.2f;  //constante del muelle
+    public float dampingConstant = 0.6f;  //constante del amortiguador
+
+    public bool enableGravityMesh;
+
+    public float minDistanceSpring = 0.0f;
+    public float maxDistanceSpring = 0.0f;
+
+    public float colliderRedius = 0.0f;
+
+
+    //variables pruebas
+
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        //Crea un nuevo mesh
+        mesh = new Mesh();
+        GetComponent<MeshFilter>().mesh = mesh;
+
+
+        // Inicializa TerrainHeight como una lista
+        TerrainHeight = new List<float>((xSize + 1) * (zSize + 1));
+
+
+        // Llena la lista con ceros
+        for (int i = 0; i < (xSize + 1) * (zSize + 1); i++)
+        {
+            TerrainHeight.Add(initPosY);
+        }
+
+        //total de objetos vacios
+        objectCount = (xSize + 1) * (zSize + 1);
+        // Inicializar el vector de objetos vacios 
+        objectVector = new GameObject[objectCount];
+
+
+        // Crear un nuevo material físico para el mesh
+        ElasticMeshMaterial = new PhysicMaterial();
+
+        // Definir las propiedades del material para el mesh
+        ElasticMeshMaterial.dynamicFriction = MeshDynamicFriction; //friccion dinamica
+        ElasticMeshMaterial.staticFriction = MeshStaticFriction;  //friccion estatica
+        ElasticMeshMaterial.bounciness = MeshBounciness;  // Qué tan "rebotante" es el objeto
+        
+        ElasticMeshMaterial.frictionCombine = PhysicMaterialCombine.Average;  // Cómo combinar la fricción con otros objetos
+        ElasticMeshMaterial.bounceCombine = PhysicMaterialCombine.Maximum;  // Cómo combinar el rebote
+
+
+        //creacion mesh
+        CreateShape();
+        UpdateMesh();
+
+
+        first_time = 1;
+
+
+
+
+
+
+    }
+
+
+    //funcion inicial para crea el mesh e incorporarle todas las funciones fisicas de este
+    void CreateShape()
+    {
+        CreateVertices();
+        CreateSpringNodes();
+        AvoidCollisionFunction();
+        CreateTriangles();
+        AssignColors();
+
+    }
+
+
+    //me recalcula donde poner cada vertice, el cual se guarda en la matriz TerrainHeight y se va implementando uno a uno
+    void CreateVertices()
+    {
+        maxTerrainHeight = initPosY;  //me soluciona el problema de colores con máx. y min. preestablecidos
+        vertices = new Vector3[(xSize + 1) * (zSize + 1)];
+        float y;
+        for (int i = 0, z = initPosZ; z <= zSize + initPosZ; z++)  //ejes x y z horizontales, eje y vertical
+        {
+            for (int x = initPosX; x <= xSize + initPosX; x++)
+            {
+                //y = Mathf.PerlinNoise(x * .3f, z * .3f) * 2f;
+
+                if (first_time == 0)
+                {
+
+                    y = initPosY;
+
+                    //poner el terreno a la altura original y guardarlo en un vector
+
+                }
+                else
+                {
+                    y = TerrainHeight[i];
+
+                }
+
+
+                //CREA OBJETOS VACIOS Y LES PROPORCIONA "MASA"
+
+                // Definir la posición del nodo
+                Vector3 nodePosition = new Vector3(x, y, z) / MeshScale;
+
+                // Guardar la posición en los vértices de la malla
+                vertices[i] = nodePosition;  //FUNCIONA A MEDIAS, cambia la escala/tamaño de los triangulos
+
+                // Crear un nuevo GameObject vacío
+                GameObject emptyObject = new GameObject("EmptyObject_" + i);
+
+                // Opcional: Asignar la posición inicial del objeto
+                emptyObject.transform.position = nodePosition; // nodePosition; // new Vector3(x, y, z)/MeshScale;
+                // Guardar el objeto en el vector
+                objectVector[i] = emptyObject;
+            
+                // Emparentar el objeto al mesh para que sea parte de su jerarquía, sin que cambie su posicion
+                emptyObject.transform.SetParent(this.transform, false);
+
+                
+                //añade un rigidbody al objeto vacio
+                Rigidbody rb = emptyObject.AddComponent<Rigidbody>();
+
+                // Comprobar las posiciones X y Z
+                if (emptyObject.transform.position.x == initPosX  || emptyObject.transform.position.x == (xSize/MeshScale) + initPosX
+                    || emptyObject.transform.position.z == initPosZ || emptyObject.transform.position.z == (zSize/MeshScale) + initPosZ)
+
+                //if ( emptyObject.transform.position.z == initPosZ)  //para hacer que el mesh se comporte como una manta suspendida
+                {
+                    // Congelar todas las restricciones de movimiento y rotación
+                    //rb.constraints = RigidbodyConstraints.FreezePosition;
+                    rb.constraints = RigidbodyConstraints.FreezeAll;
+                }
+                else
+                {
+                    // Si no se cumple la condición, se dejan libres
+                    rb.constraints = RigidbodyConstraints.None;
+
+                    //congela las rotaciones de los nodos
+                    //rb.constraints = RigidbodyConstraints.FreezeRotation; //si se habilita esa linea peta las fisicas de Unity
+                }
+ 
+                // Cambia la masa del Rigidbody a 5
+                rb.mass = 0.001f;  //masa manta 0.01
+                rb.isKinematic = false; 
+
+                //se le quita la gravedad al muelle POR VER SI ES CORRECTO
+                rb.useGravity = enableGravityMesh;
+                rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+                
+
+                //añade un rigidbody al objeto vacio
+                SphereCollider sphereCollider = emptyObject.AddComponent<SphereCollider>();
+                // Ajustar el radio del SphereCollider
+                sphereCollider.radius = colliderRedius;
+                // Hacer el collider un trigger si es necesario
+                sphereCollider.isTrigger = false;  // Cambia a true si necesitas que sea un trigger*/
+
+                // Asignar el material al collider
+                sphereCollider.material = ElasticMeshMaterial;
+
+                if (y > maxTerrainHeight)
+                    maxTerrainHeight = y;
+                if (y < minTerrainHeight)
+                    minTerrainHeight = y;
+
+                i++;
+            }
+        }
+
+
+
+
+
+    }//fin create vertices
+
+    
+
+    //CURIOSIDAD A COMENTAR A ALBERTO, SOLO PERMITE UNA ESCALA DE 2! (EXPONENCIAL), SI NO PARTE DE LOS MUELLES NO LOS COLOCA
+    //SIGUE HABIENDO PROBLEMAS CON LAS ESCALAS CON POSICIONES INICIALES DIFERENTES A 0
+    //crea los muelles entre los nodos
+    void CreateSpringNodes()
+    {
+        float SizeVertices = 1 / MeshScale;
+        float xSizeVertices = xSize / MeshScale;
+        float zSizeVertices = zSize / MeshScale;
+
+        for (int i = 0; i < (xSize + 1) * (zSize + 1); i++)
+        {
+            GameObject obj = objectVector[i];
+            if (obj != null)
+            {
+
+                
+                //condiciones spring joint 1 (X-1, Z+1), posicion vector i + xSize
+                if(i > 0 && i + xSize < (xSize + 1) * (zSize + 1) && obj.transform.position.z + SizeVertices == objectVector[i + xSize].transform.position.z 
+                    && obj.transform.position.x - SizeVertices >= initPosX && obj.transform.position.z + SizeVertices <= zSizeVertices + initPosZ)
+                {
+                    Debug.Log("OK 1, hay " + ((xSize + 1) * (zSize + 1) - xSize - zSize - 1));
+
+                    // Obtiene los dos primeros objetos vacíos
+                    GameObject firstObject = objectVector[i];
+                    GameObject secondObject = objectVector[i + xSize];
+
+                    CreateSpringJoint(firstObject, secondObject);
+
+                }
+
+                //condiciones spring joint 2 (X=, Z+1) , posicion vector i + xSize + 1
+                if (i + xSize + 1 < (xSize + 1) * (zSize + 1) && obj.transform.position.z + SizeVertices == objectVector[i + xSize + 1].transform.position.z
+                    && obj.transform.position.x == objectVector[i + xSize + 1].transform.position.x && obj.transform.position.z + SizeVertices <= zSizeVertices + initPosZ)
+                {
+                    Debug.Log("OK 2, hay " + ((xSize + 1) * (zSize + 1) - zSize - 1));
+
+                    // Obtiene los dos primeros objetos vacíos
+                    GameObject firstObject = objectVector[i];
+                    GameObject secondObject = objectVector[i + xSize + 1];
+
+                    CreateSpringJoint(firstObject, secondObject);
+                }
+
+                //condiciones spring joint 3 (X+1, Z+1) , posicion vector i + xSize + 2
+                if (i + xSize + 2 < (xSize + 1) * (zSize + 1) && obj.transform.position.z + SizeVertices == objectVector[i + xSize + 2].transform.position.z
+                    && obj.transform.position.x + SizeVertices <= xSizeVertices + initPosX && obj.transform.position.z + SizeVertices <= zSizeVertices + initPosZ)
+                {
+                    Debug.Log("OK 3, hay " + ((xSize + 1) * (zSize + 1) - xSize - zSize - 1));
+
+                    // Obtiene los dos primeros objetos vacíos
+                    GameObject firstObject = objectVector[i];
+                    GameObject secondObject = objectVector[i + xSize + 2];
+
+                    CreateSpringJoint(firstObject, secondObject);
+                }
+
+                //condiciones spring joint 4 (X+1, Z=) , posicion vector i + 1
+                if (i + 1 < (xSize + 1) * (zSize + 1) && obj.transform.position.z == objectVector[i + 1].transform.position.z 
+                    && obj.transform.position.x + SizeVertices <= xSizeVertices + initPosX)
+                {
+                    Debug.Log("OK 4, hay " + ((xSize + 1) * (zSize + 1) - xSize - 1));
+
+                    // Obtiene los dos primeros objetos vacíos
+                    GameObject firstObject = objectVector[i];
+                    GameObject secondObject = objectVector[i + 1];
+
+                    CreateSpringJoint(firstObject, secondObject);
+                }
+
+            }
+
+        } //end for
+
+    }//fin CreateSpringNodes
+
+    void CreateSpringJoint(GameObject firstObject, GameObject secondObject)
+    {
+        // Crea un Spring Joint en el primer objeto
+        SpringJoint springJoint = firstObject.AddComponent<SpringJoint>();
+        springJoint.connectedBody = secondObject.GetComponent<Rigidbody>(); // Conecta el segundo objeto
+
+        // Configura los parámetros del Spring Joint
+        springJoint.autoConfigureConnectedAnchor = true; //Unity configura automaticamente los puntos de anclaje para mantener la distancia inicial entre ellos
+
+
+        springJoint.spring = springConstant; // Fuerza del resorte
+        springJoint.damper = dampingConstant; // Amortiguación
+        springJoint.minDistance = minDistanceSpring; // Distancia mínima
+        springJoint.maxDistance = maxDistanceSpring; // Distancia máxima
+        springJoint.tolerance = 0.0f;
+
+        springJoint.enableCollision = true;
+        springJoint.enablePreprocessing = true;
+        
+
+    }
+
+    //utilizo esta función para que los colliders de la malla se ignoren entre si, para que el funcionamiento de la malla sea mas optimo y
+    //no se malgaste tanta potencia computacional en calcular los choques entre los empty objects de la malla
+    void AvoidCollisionFunction()
+    {
+        for (int i = 0; i < (xSize + 1) * (zSize + 1); i++)
+        {
+            //cojo el primer empty object para vincularlo al resto
+            GameObject fistObject = objectVector[i];
+            Collider colliderA = fistObject.GetComponent<Collider>();
+
+            for (int j = i + 1; j < (xSize + 1) * (zSize + 1); j++)
+            {
+                //cojo el segundo empty object para completar la funcion ignore collision
+                GameObject secondObject = objectVector[j];
+                Collider colliderB = objectVector[j].GetComponent<Collider>();
+
+                // Asegúrate de que ambos objetos tienen un collider
+                if (colliderA != null && colliderB != null)
+                {
+                    Physics.IgnoreCollision(colliderA, colliderB);  //hago que 2 colliders se ignoren entre si
+                    //Debug.Log("Se cumple funcion avoid");
+                }
+            }
+        }
+
+    }
+
+
+
+    //me crea los triangulos del mesh en función de donde estan situados los vertices
+    void CreateTriangles()
+    {
+        int vert = 0;
+        int tris = 0;
+        triangles = new int[xSize * zSize * 6];
+
+        for (int z = 0 + initPosZ; z < zSize + initPosZ; z++)
+        {
+            for (int x = 0 + initPosX; x < xSize + initPosX; x++)
+            {
+                triangles[tris + 0] = vert + 0;
+                triangles[tris + 1] = vert + xSize + 1;
+                triangles[tris + 2] = vert + 1;
+                triangles[tris + 3] = vert + 1;
+                triangles[tris + 4] = vert + xSize + 1;
+                triangles[tris + 5] = vert + xSize + 2;
+
+                vert++;
+                tris += 6;
+            }
+            vert++;
+        }
+    }
+
+    //Me asigna un gradiente de colores en el mesh en fucnión de su deformación
+    void AssignColors()
+    {
+        colors = new Color[vertices.Length];
+        for (int i = 0, z = 0; z <= zSize; z++)
+        {
+            for (int x = 0; x <= xSize; x++)
+            {
+                float height = Mathf.InverseLerp(minTerrainHeight, maxTerrainHeight, vertices[i].y);
+                colors[i] = gradient.Evaluate(height);
+
+                i++;
+            }
+        }
+    }
+
+    // Update Mesh, me actualiza el mesh a tiempo real por si hay cambios
+    void UpdateMesh()
+    {
+        //me comprueba que los mesh esten limpios, y me los actualiza
+        mesh.Clear();
+
+        mesh.vertices = vertices;
+        mesh.triangles = triangles;
+        mesh.colors = colors;
+
+        mesh.RecalculateNormals();
+
+
+        mesh.RecalculateBounds();
+
+        //COLLIDER MESH COMPLETO, NO INDIVIDUAL, SE COMENTA POR EL MOMENTO 
+        // Ensure the MeshCollider is updated
+        MeshCollider meshCollider = GetComponent<MeshCollider>();
+        meshCollider.sharedMesh = null; // Clear the MeshCollider
+        meshCollider.sharedMesh = mesh; // Reassign the updated mesh*/
+
+    }
+
+    void Update()
+    {
+        AssignNewVertices();
+        CreateTriangles();
+        AssignColors();
+        UpdateMesh();
+
+    }//fin update
+
+    //Actualiza la posición de los nodos del mesh con los empty object creados, para que así, los nodos se
+    ////muevan con los gameobjects y en consecuencia se mueva el mesh
+    void AssignNewVertices()
+    {
+        //Debug.Log("Actualizando");
+        for (int i = 0; i < (xSize + 1) * (zSize + 1); i++)
+        {
+            GameObject obj = objectVector[i];
+            if (obj != null)
+            {
+                float x = obj.transform.position.x;
+                float y = obj.transform.position.y;
+                float z = obj.transform.position.z;
+
+                // Definir la posición del nodo
+                Vector3 nodePosition = new Vector3(x, y, z); // MeshScale;
+
+                // Guardar la posición en los vértices de la malla
+                vertices[i] = nodePosition;  //FUNCIONA A MEDIAS, cambia la escala/tamaño de los triangulos
+
+                if (y > maxTerrainHeight)
+                    maxTerrainHeight = y;
+                if (y < minTerrainHeight)
+                    minTerrainHeight = y;
+
+            }
+        } //end for
+
+    }//fin AssignNewVertices
+
+
+
+
+
+
+    /*
+    //CANVAS
+    //MODIFICACIONES A LAS VARIABLES EN FUNCIÓN DEL CANVAS   
+
+    //se cambia la posición original o punto de origen del mesh, ejes horizontales X y Z, vertical Y
+    public void UpdateInitialPosX(int newValue)
+    {
+
+        initPosX = newValue;
+        //RECALCULAR MESH
+        first_time = 0;
+        Start();
+
+    }
+
+    public void UpdateInitialPosZ(int newValue)
+    {
+
+        initPosZ = newValue;
+        //RECALCULAR MESH
+        first_time = 0;
+        Start();
+
+    }
+    public void UpdateInitialPosY(int newValue)
+    {
+
+        initPosY = newValue;
+        //RECALCULAR MESH
+        first_time = 0;
+        Start();
+
+
+    }
+
+
+    public void UpdateSphereWeight(float newValue)
+    {
+
+        sphereMass = newValue;
+        //RECALCULAR MESH
+        x_offset = FindOffsetDeformation(sphereMass, springConstant, initPosY);
+
+    }
+
+    public void UpdateSprindConst(float newValue)
+    {
+        springConstant = newValue;
+        //RECALCULAR MESH
+        x_offset = FindOffsetDeformation(sphereMass, springConstant, initPosY);
+
+    }
+    public void UpdateDampConst(float newValue)
+    {
+        dampingConstant = newValue;
+        //RECALCULAR MESH
+    }
+
+
+    public void UpdateXsizeConst(int newValue)
+    {
+        xSize = newValue;
+        //RECALCULAR MESH
+        first_time = 0;
+        Start();
+    }
+
+    public void UpdateZsizeConst(int newValue)
+    {
+        zSize = newValue;
+        //RECALCULAR MESH
+        first_time = 0;
+        Start();
+    }
+
+    public void UpdateScaleConst(float newValue)
+    {
+
+        //RECALCULAR MESH
+        //transform.localScale = new Vector3(newValue, 1, newValue);
+        MeshScale = newValue;
+        first_time = 0;
+        Start();
+
+    }
+
+
+    */
+
+
+
+     
+    }//FIN DEL PROGRAMA
