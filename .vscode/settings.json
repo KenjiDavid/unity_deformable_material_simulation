@@ -56,5 +56,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Trabajo_Fin_Master_kenji.sln"
+    "dotnet.defaultSolution": "unity_deformable_material_simulation.sln"
 }
